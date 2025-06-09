@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1><i class="bi bi-calendar-plus me-2"></i>Add New Exam</h1>
+        <a href="{{ url_for('list_exams') }}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> Back to Exams
+        </a>
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="card-body">
+            <form method="POST">
+                <div class="row g-3">
+                    <!-- Exam Title -->
+                    <div class="col-md-12">
+                        <label for="title" class="form-label">Exam Title*</label>
+                        <input type="text" class="form-control" id="title" name="title" required>
+                    </div>
+
+                    <!-- Department and Level -->
+                    <div class="col-md-6">
+                        <label for="department" class="form-label">Department*</label>
+                        <select class="form-select" id="department" name="department" required>
+                            <option value="" disabled selected>Select department</option>
+                            <option value="Computer Science">Computer Science</option>
+                            <option value="Civil Engineering">Civil Engineering</option>
+                            <!-- Add other departments as needed -->
+                        </select>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label for="level" class="form-label">Level*</label>
+                        <select class="form-select" id="level" name="level" required>
+                            <option value="" disabled selected>Select level</option>
+                            <option value="100L">100 Level</option>
+                            <option value="200L">200 Level</option>
+                            <option value="300L">300 Level</option>
+                            <option value="400L">400 Level</option>
+                        </select>
+                    </div>
+
+                    <!-- Date and Time -->
+                    <div class="col-md-6">
+                        <label for="start_time" class="form-label">Start Time*</label>
+                        <input type="datetime-local" class="form-control" id="start_time" name="start_time" required>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label for="end_time" class="form-label">End Time*</label>
+                        <input type="datetime-local" class="form-control" id="end_time" name="end_time" required>
+                    </div>
+                </div>
+
+                <div class="mt-4">
+                    <button type="submit" class="btn btn-primary me-2">
+                        <i class="bi bi-save"></i> Save Exam
+                    </button>
+                    <a href="{{ url_for('list_exams') }}" class="btn btn-outline-secondary">
+                        Cancel
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<style>
+    .form-label {
+        font-weight: 500;
+        margin-bottom: 0.5rem;
+    }
+</style>
+{% endblock %}

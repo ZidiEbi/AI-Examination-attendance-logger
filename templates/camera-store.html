@@ -1,0 +1,306 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="mb-0">
+                <i class="bi bi-camera-video me-2"></i>Live Student Verification
+            </h1>
+            {% if exam_details %}
+            <div class="text-muted">
+                For Exam: <strong>{{ exam_details.title }}</strong> ({{ exam_details.department }} - {{ exam_details.level }})
+                <br>
+                Exam ID: <strong>{{ exam_details.id }}</strong>
+                <span class="badge bg-{% if exam_details.status == 'scheduled' %}warning
+                                     {% elif exam_details.status == 'active' %}success
+                                     {% else %}secondary{% endif %} ms-2">
+                    {{ exam_details.status|upper }}
+                </span>
+            </div>
+            {% else %}
+            <div class="text-muted">No exam details available.</div>
+            {% endif %}
+        </div>
+        <div>
+            <a href="{{ url_for('manage_exam', exam_id=exam_id) }}" class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left"></i> Back to Exam Management
+            </a>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card shadow-sm mb-3">
+                <div class="card-body text-center">
+                    <h5 class="card-title">Live Camera Feed & Scan Area</h5>
+                    <div style="position: relative; width: 100%; max-width: 640px; margin: 0 auto;">
+                        <video id="video" width="100%" height="auto" autoplay muted class="rounded border"></video>
+                        {# Canvas for drawing bounding boxes, overlayed on video #}
+                        <canvas id="overlayCanvas" style="position: absolute; top: 0; left: 0; pointer-events: none;"></canvas>
+                        <div id="camera-status" class="alert alert-info mt-3" role="alert">
+                            <i class="bi bi-info-circle me-2"></i>Initializing camera...
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card shadow-sm h-100">
+                <div class="card-body">
+                    <h5 class="card-title">
+                        <i class="bi bi-clipboard-check"></i> Real-time Verification Log
+                    </h4>
+                    <div id="log-container" class="list-group" style="max-height: 500px; overflow-y: auto;">
+                        <div class="list-group-item list-group-item-info text-center">
+                            <i class="bi bi-hourglass-split me-2"></i>Waiting for detections...
+                        </div>
+                    </div>
+                    <small class="text-muted mt-3 d-block text-center">
+                        Verified students will appear here.
+                    </small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    alert("JavaScript starting!"); // CRITICAL DEBUG ALERT: If you don't see this, JS is not running.
+
+    console.log("camera.html script block loaded and starting execution."); // Debug Log 1
+
+    // Wrap the main DOMContentLoaded logic in a try-catch for global error catching
+    try {
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log("DOMContentLoaded event fired."); // Debug Log 3
+            
+            // Retrieve examId from data attribute on the body
+            const examId = parseInt(document.body.dataset.examId);
+            console.log("Exam ID loaded in JavaScript:", examId); // Debug Log 2 (moved here to after DOM is ready)
+
+            const video = document.getElementById('video');
+            const overlayCanvas = document.getElementById('overlayCanvas');
+            const logContainer = document.getElementById('log-container');
+            const cameraStatusDiv = document.getElementById('camera-status');
+            
+            let recognitionInterval = null; 
+            const VERIFICATION_INTERVAL_MS = 1500; 
+
+            const overlayContext = overlayCanvas.getContext('2d');
+
+            function updateCameraStatus(message, type = 'info') {
+                cameraStatusDiv.className = `alert alert-${type} mt-3`;
+                cameraStatusDiv.innerHTML = `<i class="bi bi-${type === 'danger' ? 'x-circle' : type === 'success' ? 'check-circle' : 'info-circle'} me-2"></i>${message}`;
+                console.log(`Status Updated: ${message} (Type: ${type})`); // Debug Log 4
+            }
+
+            function addLogEntry(type, message, studentId = null, name = null, confidence = null) {
+                const now = new Date();
+                const timeString = now.toLocaleTimeString();
+
+                const entry = document.createElement('div');
+                entry.classList.add('list-group-item', `list-group-item-${type}`);
+                entry.innerHTML = `
+                    <div class="d-flex w-100 justify-content-between align-items-center">
+                        <h6 class="mb-1">
+                            <i class="bi bi-${type === 'danger' ? 'x-circle' : type === 'success' ? 'check-circle' : type === 'warning' ? 'exclamation-triangle' : 'info-circle'} me-2"></i>
+                            ${message}
+                        </h6>
+                        <small class="text-muted">${timeString}</small>
+                    </div>
+                    ${studentId ? `<small class="mb-0"><strong>ID:</strong> ${studentId}</small><br>` : ''}
+                    ${name ? `<small class="mb-0"><strong>Name:</strong> ${name}</small><br>` : ''}
+                    ${confidence ? `<small class="mb-0"><strong>Confidence:</strong> ${(confidence * 100).toFixed(2)}%</small>` : ''}
+                `;
+                logContainer.prepend(entry); 
+
+                if (logContainer.children.length > 10) {
+                    logContainer.removeChild(logContainer.lastChild);
+                }
+                console.log(`Log Entry Added: Type=${type}, Message=${message}`); // Debug Log 5
+            }
+
+            // Initialize camera stream
+            function initCamera() {
+                console.log("Attempting to initialize camera via getUserMedia."); // Debug Log 6
+                if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                    try { // Added try-catch around getUserMedia call
+                        navigator.mediaDevices.getUserMedia({ video: true })
+                            .then(function(stream) {
+                                console.log("getUserMedia success. Stream obtained."); // Debug Log 7
+                                video.srcObject = stream;
+                                console.log("Video srcObject set:", video.srcObject); // Debug Log 8
+
+                                const playPromise = video.play();
+                                if (playPromise !== undefined) {
+                                    playPromise.then(_ => {
+                                        console.log("Video is playing."); // Debug Log 9
+                                    }).catch(error => {
+                                        console.error("Video play() failed:", error); // Debug Log 10
+                                        updateCameraStatus(`Error playing video: ${error.message}. Check browser console.`, 'danger');
+                                    });
+                                }
+
+                                video.onloadedmetadata = function() {
+                                    console.log("Video metadata loaded. Dimensions:", video.videoWidth, "x", video.videoHeight); // Debug Log 11
+                                    overlayCanvas.width = video.videoWidth;
+                                    overlayCanvas.height = video.videoHeight;
+                                    overlayCanvas.style.width = video.offsetWidth + 'px';
+                                    overlayCanvas.style.height = video.offsetHeight + 'px';
+
+                                    updateCameraStatus('Camera feed active. Scanning for faces...', 'success');
+                                    startRecognitionInterval();
+                                };
+                            })
+                            .catch(function(err) {
+                                updateCameraStatus(`Error accessing camera: ${err.message}. Please allow camera access and ensure no other app is using it.`, 'danger');
+                                console.error("Camera access error (getUserMedia promise rejection):", err); // Debug Log 12
+                                stopRecognitionInterval();
+                            });
+                    } catch (syncErr) { // Catch synchronous errors during getUserMedia call itself
+                        console.error("Synchronous error during getUserMedia setup:", syncErr); // Debug Log 13
+                        updateCameraStatus(`Critical camera error: ${syncErr.message}. Check browser console.`, 'danger');
+                        stopRecognitionInterval();
+                    }
+                } else {
+                    updateCameraStatus('Your browser does not support camera access (getUserMedia API).', 'danger');
+                    console.error("Browser does not support getUserMedia."); // Debug Log 14
+                }
+            }
+
+            function clearOverlay() {
+                overlayContext.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+                console.log("Overlay canvas cleared."); // Debug Log 15
+            }
+
+            function drawFaceBox(bbox, color = 'green', label = '') {
+                if (!bbox) return;
+                console.log("Drawing face box:", bbox, "Label:", label); // Debug Log 16
+                const scaleX = overlayCanvas.width / video.videoWidth;
+                const scaleY = overlayCanvas.height / video.videoHeight;
+
+                const [x1, y1, x2, y2] = bbox;
+                const scaledX1 = x1 * scaleX;
+                const scaledY1 = y1 * scaleY;
+                const scaledWidth = (x2 - x1) * scaleX;
+                const scaledHeight = (y2 - y1) * scaleY;
+
+                overlayContext.strokeStyle = color;
+                overlayContext.lineWidth = 2;
+                overlayContext.strokeRect(scaledX1, scaledY1, scaledWidth, scaledHeight);
+
+                if (label) {
+                    overlayContext.fillStyle = color;
+                    overlayContext.font = '16px Arial';
+                    overlayContext.textBaseline = 'top';
+                    overlayContext.fillRect(scaledX1, scaledY1 - 20, overlayContext.measureText(label).width + 8, 20); 
+                    overlayContext.fillStyle = 'white';
+                    overlayContext.fillText(label, scaledX1 + 4, scaledY1 - 18);
+                }
+            }
+
+            async function captureAndVerify() {
+                console.log("Attempting captureAndVerify cycle."); // Debug Log 17
+                clearOverlay(); 
+
+                if (video.readyState === video.HAVE_ENOUGH_DATA && video.videoWidth > 0 && video.videoHeight > 0) {
+                    console.log("Video ready, capturing frame."); // Debug Log 18
+                    const tempCanvas = document.createElement('canvas');
+                    tempCanvas.width = video.videoWidth;
+                    tempCanvas.height = video.videoHeight;
+                    const tempContext = tempCanvas.getContext('2d');
+                    tempContext.drawImage(video, 0, 0, tempCanvas.width, tempCanvas.height);
+
+                    tempCanvas.toBlob(async function(blob) {
+                        console.log("Frame converted to blob, sending for verification."); // Debug Log 19
+                        const formData = new FormData();
+                        formData.append('image', blob, 'capture.jpeg'); 
+
+                        try { // Added try-catch around fetch call
+                            const response = await fetch(`/api/exam/${examId}/verify`, {
+                                method: 'POST',
+                                body: formData
+                            });
+                            console.log("Fetch response received, status:", response.status); // Debug Log 20
+
+                            const data = await response.json();
+                            console.log("Verification API response data:", data); // Debug Log 21
+                            
+                            let logType = 'info';
+                            let logMessage = data.message || 'Processing complete.';
+
+                            if (data.bbox) {
+                                if (data.status === 'verified') {
+                                    logType = 'success';
+                                    logMessage = `VERIFIED: ${data.name || data.student_id}`;
+                                    drawFaceBox(data.bbox, 'green', `${data.name || data.student_id}`);
+                                } else if (data.status === 'already_verified') {
+                                    logType = 'warning';
+                                    logMessage = `ALREADY VERIFIED: ${data.name || data.student_id}`;
+                                    drawFaceBox(data.bbox, 'blue', `${data.name || data.student_id}`);
+                                } else if (data.status === 'unknown') {
+                                    logType = 'warning';
+                                    logMessage = `UNKNOWN FACE: ${data.message}`;
+                                    drawFaceBox(data.bbox, 'red', 'Unknown');
+                                } else if (data.status === 'no_face_detected') {
+                                    logType = 'info';
+                                    logMessage = 'No face detected in frame.';
+                                } else if (data.status === 'error') {
+                                    logType = 'danger';
+                                    logMessage = `ERROR: ${data.message}`;
+                                }
+                            } else { 
+                                 if (data.status === 'no_face_detected') {
+                                     logType = 'info';
+                                     logMessage = 'No face detected in frame.';
+                                 } else if (data.status === 'error') {
+                                     logType = 'danger';
+                                     logMessage = `ERROR: ${data.message}`;
+                                 } else {
+                                     logType = 'info'; 
+                                     logMessage = data.message || 'No specific message.';
+                                 }
+                            }
+
+                            addLogEntry(logType, logMessage, data.student_id, data.name, data.confidence);
+
+                        } catch (error) {
+                            console.error('Verification API call failed (catch block):', error); // Debug Log 22
+                            addLogEntry('danger', `Network or server error during verification. ${error.message || ''}`);
+                        }
+                    }, 'image/jpeg', 0.8); 
+                } else {
+                    console.log("Video not ready for capture or no data. Skipping frame."); // Debug Log 23
+                    updateCameraStatus('Camera not ready. Waiting for video data...', 'warning');
+                }
+            }
+
+            function startRecognitionInterval() {
+                console.log("Starting recognition interval."); // Debug Log 24
+                if (recognitionInterval) clearInterval(recognitionInterval); 
+                recognitionInterval = setInterval(captureAndVerify, VERIFICATION_INTERVAL_MS);
+            }
+
+            function stopRecognitionInterval() {
+                console.log("Stopping recognition interval."); // Debug Log 25
+                if (recognitionInterval) {
+                    clearInterval(recognitionInterval);
+                    recognitionInterval = null;
+                }
+            }
+
+            initCamera();
+
+            window.addEventListener('beforeunload', stopRecognitionInterval);
+        });
+    } catch (globalError) { // Global catch for any immediate script parsing errors
+        console.error("Global JavaScript error before DOMContentLoaded:", globalError); // Debug Log 26
+        // Re-added alert for this specific global error case as it bypasses normal console output
+        alert("A critical error occurred loading the page script: " + globalError.message + ". Please check the browser console.");
+    }
+</script>
+{% endblock %}

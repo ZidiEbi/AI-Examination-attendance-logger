@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between mb-4">
+    <h1>Attendance Records</h1>
+    <div>
+        <a href="{{ url_for('camera') }}" class="btn btn-success me-2">Start Camera</a>
+        <a href="{{ url_for('export') }}?format=csv" class="btn btn-secondary">Export CSV</a>
+    </div>
+</div>
+
+<div class="mb-3">
+    <form class="d-flex">
+        <input class="form-control me-2" type="search" name="search" placeholder="Search names..." 
+               value="{{ search_query }}">
+        <button class="btn btn-outline-primary" type="submit">Search</button>
+    </form>
+</div>
+
+<table class="table table-striped">
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Time</th>
+            <th>Status</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for record in records %}
+        <tr>
+            <td>{{ record.name }}</td>
+            <td>{{ record.timestamp }}</td>
+            <td><span class="badge bg-success">Present</span></td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

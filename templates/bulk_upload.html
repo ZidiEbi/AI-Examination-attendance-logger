@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="card shadow-sm">
+        <div class="card-body">
+            <h2 class="card-title mb-4">
+                <i class="bi bi-upload me-2"></i>Bulk Student Upload
+            </h2>
+            
+            <form method="post" enctype="multipart/form-data" id="uploadForm">
+                <!-- CSV Upload Section -->
+                <div class="mb-4">
+                    <label for="csv_file" class="form-label fw-bold">Student Data (CSV)</label>
+                    <input type="file" class="form-control" id="csv_file" name="csv_file" accept=".csv" required>
+                    <div class="form-text mt-2">
+                        <h6 class="fw-bold">Requirements:</h6>
+                        <ul class="mb-1">
+                            <li>Single CSV file containing all student records</li>
+                            <li>Required columns in exact order: <code>name, student_id, department, level</code></li>
+                            <li>No header variations (case-sensitive)</li>
+                        </ul>
+                        <a href="{{ url_for('download_template') }}" 
+                           download="students_template.csv" 
+                           class="btn btn-sm btn-outline-primary mt-1">
+                            <i class="bi bi-download"></i> Download Template
+                        </a>
+                    </div>
+                </div>
+                
+                <!-- Photo ZIP Upload Section -->
+                <div class="mb-4">
+                    <label for="photos_zip" class="form-label fw-bold">Passport Photos (ZIP Archive)</label>
+                    <input type="file" class="form-control" id="photos_zip" name="photos_zip" accept=".zip" required>
+                    <div class="form-text mt-2">
+                        <h6 class="fw-bold">Requirements:</h6>
+                        <ul>
+                            <li>One photo per student from the CSV</li>
+                            <li>Photos must be named exactly as <code>[student_id].jpg</code> (e.g., <code>CS101.jpg</code>)</li>
+                            <li>Minimum resolution: 640×480 pixels</li>
+                            <li>Clear frontal face with no obstructions</li>
+                            <li>Max file size: 20MB</li>
+                        </ul>
+                        <div class="alert alert-warning py-2 mt-2">
+                            <i class="bi bi-exclamation-triangle-fill"></i> 
+                            <strong>Matching required:</strong> Every student in CSV must have a corresponding photo file in the ZIP
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Action Buttons -->
+                <div class="d-flex justify-content-between align-items-center mt-4">
+                    <div>
+                        <button type="submit" class="btn btn-primary" id="submitBtn">
+                            <i class="bi bi-upload me-1"></i> Process Upload
+                        </button>
+                        <a href="{{ url_for('admin_dashboard') }}" class="btn btn-outline-secondary ms-2">
+                            Cancel
+                        </a>
+                    </div>
+                    <div id="fileValidation" class="text-danger small fw-bold"></div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Client-side Validation Script -->
+<script>
+document.getElementById('uploadForm').addEventListener('submit', function(e) {
+    const csvFile = document.getElementById('csv_file').files[0];
+    const zipFile = document.getElementById('photos_zip').files[0];
+    const validationMsg = document.getElementById('fileValidation');
+    
+    // Reset validation
+    validationMsg.textContent = '';
+    
+    // Basic file type validation
+    if (csvFile && !csvFile.name.endsWith('.csv')) {
+        validationMsg.textContent = 'Student data must be a CSV file';
+        e.preventDefault();
+        return;
+    }
+    
+    if (zipFile && !zipFile.name.endsWith('.zip')) {
+        validationMsg.textContent = 'Photos must be in a ZIP archive';
+        e.preventDefault();
+        return;
+    }
+    
+    // File size check (20MB limit)
+    if (zipFile && zipFile.size > 20 * 1024 * 1024) {
+        validationMsg.textContent = 'ZIP file exceeds 20MB limit';
+        e.preventDefault();
+        return;
+    }
+    
+    // Show processing state
+    const submitBtn = document.getElementById('submitBtn');
+    submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Processing...';
+    submitBtn.disabled = true;
+});
+</script>
+
+<style>
+    .form-text ul {
+        padding-left: 1.5rem;
+        margin-bottom: 0.5rem;
+    }
+    #fileValidation {
+        min-height: 1.5rem;
+    }
+</style>
+{% endblock %}

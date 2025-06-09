@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Student Verification</title>
+    <!-- Include Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Include Bootstrap Icons -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+</head>
+<body>
+
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="mb-0">
+                <i class="bi bi-camera-video me-2"></i>Live Student Verification
+            </h1>
+            {# Display actual exam details using Flask context #}
+            {% if exam_details %}
+            <div class="text-muted">
+                For Exam: <strong>{{ exam_details.title }}</strong> ({{ exam_details.department }} - {{ exam_details.level }})
+                <br>
+                Exam ID: <strong>{{ exam_details.id }}</strong>
+                <span class="badge bg-{% if exam_details.status == 'scheduled' %}warning
+                                     {% elif exam_details.status == 'active' %}success
+                                     {% else %}secondary{% endif %} ms-2">
+                    {{ exam_details.status|upper }}
+                </span>
+            </div>
+            {% else %}
+            <div class="text-muted">No exam details available.</div>
+            {% endif %}
+        </div>
+        <div>
+            {# Changed to use Flask's url_for for proper navigation #}
+            <a href="{{ url_for('manage_exam', exam_id=exam_details.id) }}" class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left"></i> Back to Exam Management
+            </a>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card shadow-sm mb-3">
+                <div class="card-body text-center">
+                    <h5 class="card-title">Live Camera Feed & Scan Area</h5>
+                    <div style="position: relative; width: 100%; max-width: 640px; margin: 0 auto;">
+                        <video id="video" width="100%" height="auto" autoplay muted class="rounded border"></video>
+                        <canvas id="overlayCanvas" style="position: absolute; top: 0; left: 0; pointer-events: none;"></canvas>
+                        <div id="camera-status" class="alert alert-info mt-3" role="alert">
+                            <i class="bi bi-info-circle me-2"></i>Initializing camera...
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card shadow-sm h-100">
+                <div class="card-body">
+                    <h5 class="card-title">
+                        <i class="bi bi-clipboard-check"></i> Real-time Verification Log
+                    </h4>
+                    <div id="log-container" class="list-group" style="max-height: 500px; overflow-y: auto;">
+                        <div class="list-group-item list-group-item-info text-center">
+                            <i class="bi bi-hourglass-split me-2"></i>Waiting for detections...
+                        </div>
+                    </div>
+                    <small class="text-muted mt-3 d-block text-center">
+                        Verified students will appear here.
+                    </small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{# Hidden div to pass exam_id securely and robustly to JavaScript #}
+{# This now correctly pulls exam_details.id from Flask context #}
+<div id="exam-data" data-exam-id="{{ exam_details.id }}" style="display:none;"></div>
+
+<!-- Bootstrap JS Bundle (popper.js included) -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+<script>
+    // Removed alert as per previous cleanup instructions
+    console.log("Live verification script loaded and starting execution."); // More descriptive log
+
+    try {
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log("DOMContentLoaded event fired for live verification.");
+            
+            const video = document.getElementById('video');
+            const overlayCanvas = document.getElementById('overlayCanvas');
+            const logContainer = document.getElementById('log-container');
+            const cameraStatusDiv = document.getElementById('camera-status');
+            const examId = parseInt(document.getElementById('exam-data').dataset.examId); // Safely parse examId
+
+            function updateCameraStatus(message, type = 'info') {
+                if (cameraStatusDiv) { 
+                    cameraStatusDiv.className = `alert alert-${type} mt-3`;
+                    cameraStatusDiv.innerHTML = `<i class="bi bi-${type === 'danger' ? 'x-circle' : type === 'success' ? 'check-circle' : 'info-circle'} me-2"></i>${message}`;
+                }
+            }
+
+            function addLogEntry(type, message, studentId = null, name = null, confidence = null) {
+                const now = new Date();
+                const timeString = now.toLocaleTimeString();
+
+                const entry = document.createElement('div');
+                entry.classList.add('list-group-item', `list-group-item-${type}`);
+                entry.innerHTML = `
+                    <div class="d-flex w-100 justify-content-between align-items-center">
+                        <h6 class="mb-1">
+                            <i class="bi bi-${type === 'danger' ? 'x-circle' : type === 'success' ? 'check-circle' : type === 'warning' ? 'exclamation-triangle' : 'info-circle'} me-2"></i>
+                            ${message}
+                        </h6>
+                        <small class="text-muted">${timeString}</small>
+                    </div>
+                    ${studentId ? `<small class="mb-0"><strong>ID:</strong> ${studentId}</small><br>` : ''}
+                    ${name ? `<small class="mb-0"><strong>Name:</strong> ${name}</small><br>` : ''}
+                    ${confidence ? `<small class="mb-0"><strong>Confidence:</strong> ${(confidence * 100).toFixed(2)}%</small>` : ''}
+                `;
+                if (logContainer) { 
+                    logContainer.prepend(entry); 
+
+                    if (logContainer.children.length > 10) {
+                        logContainer.removeChild(logContainer.lastChild);
+                    }
+                }
+            }
+
+            if (isNaN(examId)) {
+                console.error("Critical Error: examId is not a valid number. Live verification cannot proceed.");
+                updateCameraStatus("Error: Exam ID not found or invalid. Please return to Exam Management.", 'danger');
+                return; 
+            }
+
+            let recognitionInterval = null; 
+            const VERIFICATION_INTERVAL_MS = 1500; // Time in milliseconds between captures
+
+            const overlayContext = overlayCanvas ? overlayCanvas.getContext('2d') : null;
+
+            function initCamera() {
+                if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                    navigator.mediaDevices.getUserMedia({ video: true })
+                        .then(function(stream) {
+                            video.srcObject = stream;
+                            const playPromise = video.play();
+                            if (playPromise !== undefined) {
+                                playPromise.then(_ => {
+                                    // Video is playing successfully
+                                }).catch(error => {
+                                    console.error("Video play() failed:", error);
+                                    updateCameraStatus(`Error playing video: ${error.message}. Check browser console.`, 'danger');
+                                });
+                            }
+
+                            video.onloadedmetadata = function() {
+                                if (overlayCanvas) { 
+                                    overlayCanvas.width = video.videoWidth;
+                                    overlayCanvas.height = video.videoHeight;
+                                    overlayCanvas.style.width = video.offsetWidth + 'px';
+                                    overlayCanvas.style.height = video.offsetHeight + 'px';
+                                }
+                                updateCameraStatus('Camera feed active. Scanning for faces...', 'success');
+                                startRecognitionInterval();
+                            };
+                        })
+                        .catch(function(err) {
+                            updateCameraStatus(`Error accessing camera: ${err.message}. Please allow camera access and ensure no other app is using it.`, 'danger');
+                            console.error("Camera access error:", err);
+                            stopRecognitionInterval();
+                        });
+                } else {
+                    updateCameraStatus('Your browser does not support camera access (getUserMedia API).', 'danger');
+                }
+            }
+
+            function clearOverlay() {
+                if (overlayContext) { 
+                    overlayContext.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+                }
+            }
+
+            function drawFaceBox(bbox, color = 'green', label = '') {
+                if (!bbox || !overlayContext || !overlayCanvas || !video) return; 
+
+                const videoWidth = video.videoWidth;
+                const videoHeight = video.videoHeight;
+                const canvasWidth = overlayCanvas.width;
+                const canvasHeight = overlayCanvas.height;
+
+                const scaleX = canvasWidth / videoWidth;
+                const scaleY = canvasHeight / videoHeight;
+
+                const x = bbox[0] * scaleX;
+                const y = bbox[1] * scaleY;
+                const width = (bbox[2] - bbox[0]) * scaleX;
+                const height = (bbox[3] - bbox[1]) * scaleY;
+
+                overlayContext.strokeStyle = color;
+                overlayContext.lineWidth = 2;
+                overlayContext.strokeRect(x, y, width, height);
+
+                if (label) {
+                    overlayContext.fillStyle = color;
+                    overlayContext.font = '16px Arial';
+                    overlayContext.textBaseline = 'top';
+                    const textPadding = 4;
+                    const textWidth = overlayContext.measureText(label).width + textPadding * 2;
+                    const textHeight = 20; 
+                    overlayContext.fillRect(x, y - textHeight, textWidth, textHeight);
+                    overlayContext.fillStyle = 'white';
+                    overlayContext.fillText(label, x + textPadding, y - textHeight + textPadding);
+                }
+            }
+
+            async function captureAndVerify() {
+                clearOverlay(); 
+
+                if (video.readyState === video.HAVE_ENOUGH_DATA && video.videoWidth > 0 && video.videoHeight > 0) {
+                    const tempCanvas = document.createElement('canvas');
+                    tempCanvas.width = video.videoWidth;
+                    tempCanvas.height = video.videoHeight;
+                    const tempContext = tempCanvas.getContext('2d');
+                    tempContext.drawImage(video, 0, 0, tempCanvas.width, tempCanvas.height);
+
+                    tempCanvas.toBlob(async function(blob) {
+                        const formData = new FormData();
+                        formData.append('image', blob, 'capture.jpeg'); 
+
+                        try { 
+                            const response = await fetch(`/api/exam/${examId}/verify`, {
+                                method: 'POST',
+                                body: formData
+                            });
+
+                            const data = await response.json();
+                            
+                            let logType = 'info';
+                            let logMessage = data.message || 'Processing complete.';
+
+                            if (data.bbox) {
+                                if (data.status === 'verified') {
+                                    logType = 'success';
+                                    logMessage = `VERIFIED: ${data.name || data.student_id}`;
+                                    drawFaceBox(data.bbox, 'green', `${data.name || data.student_id}`);
+                                } else if (data.status === 'already_verified') {
+                                    logType = 'warning';
+                                    logMessage = `ALREADY VERIFIED: ${data.name || data.student_id}`;
+                                    drawFaceBox(data.bbox, 'blue', `${data.name || data.student_id}`);
+                                } else if (data.status === 'unknown') {
+                                    logType = 'warning';
+                                    logMessage = `UNKNOWN FACE: ${data.message}`;
+                                    drawFaceBox(data.bbox, 'red', 'Unknown');
+                                } else if (data.status === 'no_face_detected') {
+                                    logType = 'info';
+                                    logMessage = 'No face detected in frame.';
+                                } else if (data.status === 'error') {
+                                    logType = 'danger';
+                                    logMessage = `ERROR: ${data.message}`;
+                                }
+                            } else { 
+                                if (data.status === 'no_face_detected') {
+                                    logType = 'info';
+                                    logMessage = 'No face detected in frame.';
+                                } else if (data.status === 'error') {
+                                    logType = 'danger';
+                                    logMessage = `ERROR: ${data.message}`;
+                                } else {
+                                    logType = 'info'; 
+                                    logMessage = data.message || 'No specific message.';
+                                }
+                            }
+
+                            addLogEntry(logType, logMessage, data.student_id, data.name, data.confidence);
+
+                        } catch (error) {
+                            console.error('Verification API call failed:', error);
+                            addLogEntry('danger', `Network or server error during verification. ${error.message || ''}`);
+                        }
+                    }, 'image/jpeg', 0.8); 
+                } else {
+                    updateCameraStatus('Camera not ready. Waiting for video data...', 'warning');
+                }
+            }
+
+            function startRecognitionInterval() {
+                if (recognitionInterval) clearInterval(recognitionInterval); 
+                recognitionInterval = setInterval(captureAndVerify, VERIFICATION_INTERVAL_MS);
+            }
+
+            function stopRecognitionInterval() {
+                if (recognitionInterval) {
+                    clearInterval(recognitionInterval);
+                    recognitionInterval = null;
+                }
+            }
+
+            initCamera();
+
+            window.addEventListener('beforeunload', stopRecognitionInterval);
+
+            let resizeTimeout;
+            window.addEventListener('resize', () => {
+                clearTimeout(resizeTimeout);
+                resizeTimeout = setTimeout(() => {
+                    if (video && overlayCanvas) {
+                        overlayCanvas.style.width = video.offsetWidth + 'px';
+                        overlayCanvas.style.height = video.offsetHeight + 'px';
+                        overlayCanvas.width = video.videoWidth;
+                        overlayCanvas.height = video.videoHeight;
+                        clearOverlay(); 
+                    }
+                }, 250);
+            });
+
+
+        });
+    } catch (globalError) { 
+        console.error("Global JavaScript error before DOMContentLoaded:", globalError);
+    }
+</script>
+</body>
+</html>

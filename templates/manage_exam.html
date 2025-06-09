@@ -1,0 +1,513 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <!-- Header Section -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="mb-0">
+                <i class="bi bi-journal-text"></i>
+                {{ exam.title }} Management
+            </h1>
+            <div class="text-muted">
+                {{ exam.department }} • {{ exam.level }} •
+                {{ exam.start_time.strftime('%Y-%m-%d') }} •
+                {{ exam.start_time.strftime('%H:%M') }}-{{ exam.end_time.strftime('%H:%M') }}
+            </div>
+        </div>
+        <div>
+            <a href="{{ url_for('admin_dashboard') }}" class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left"></i> Dashboard
+            </a>
+        </div>
+    </div>
+
+    <!-- Exam Control Panel -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <span class="badge bg-{% if exam.status == 'scheduled' %}warning
+                                     {% elif exam.status == 'active' %}success
+                                     {% else %}secondary{% endif %}">
+                        {{ exam.status|upper }}
+                    </span>
+                </div>
+                <div class="btn-group">
+                    {% if exam.status == 'scheduled' %}
+                    <form method="POST" action="{{ url_for('start_exam', exam_id=exam.id) }}" class="mb-0 me-2">
+                        <button type="submit" class="btn btn-success">
+                            <i class="bi bi-play-fill"></i> Start Exam
+                        </button>
+                    </form>
+                    {% elif exam.status == 'active' %}
+                    <form method="POST" action="{{ url_for('end_exam', exam_id=exam.id) }}" class="mb-0 me-2">
+                        <button type="submit" class="btn btn-danger">
+                            <i class="bi bi-stop-fill"></i> End Exam
+                        </button>
+                    </form>
+                    {% endif %}
+
+                    {# NEW: Button to start live verification #}
+                    {% if exam.status == 'active' %}
+                    <a href="{{ url_for('camera', exam_id=exam.id) }}" class="btn btn-primary me-2" title="Start Live Face Recognition Verification">
+                        <i class="bi bi-person-video2"></i> Start Live Verification
+                    </a>
+                    {% else %}
+                    {# Disabled button if exam is not active, with tooltip #}
+                    <button type="button" class="btn btn-primary me-2" disabled
+                            title="Start Exam to enable live verification">
+                        <i class="bi bi-person-video2"></i> Start Live Verification
+                    </button>
+                    {% endif %}
+
+                    <a href="{{ url_for('attendance_report', exam_id=exam.id) }}"
+                        class="btn btn-info">
+                        <i class="bi bi-download"></i> Export Report
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Attendance Summary Panel - KEEP THIS -->
+        <div class="col-md-4 mb-4">
+            <div class="card shadow-sm h-100">
+                <div class="card-body">
+                    <h5 class="card-title">
+                        <i class="bi bi-bar-chart-fill"></i> Attendance Summary
+                    </h5>
+                    <div class="mt-4">
+                        <h6>Verification Progress</h6>
+                        <div class="progress mb-2">
+                            <div id="attendanceProgress" class="progress-bar"
+                                role="progressbar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+                        </div>
+                        <small class="text-muted">
+                            <span id="attendedCount">0</span> of
+                            <span id="totalParticipants">0</span> students verified
+                        </small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Student Management -->
+        <div class="col-md-8 mb-4"> {# Added mb-4 for consistency #}
+            <div class="card shadow-sm h-100"> {# Added h-100 for consistent height #}
+                <div class="card-body">
+                    <h5 class="card-title mb-3"><i class="bi bi-people-fill me-2"></i>Manage Exam Participants (Enrollment)</h5> {# Clarified title #}
+                    <!-- Search and Filter -->
+                    <div class="row mb-3 g-2">
+                        <div class="col-md-5">
+                            <input type="text" id="nameSearch" class="form-control"
+                                        placeholder="Search names...">
+                        </div>
+                        <div class="col-md-3">
+                            <select id="deptFilter" class="form-select">
+                                <option value="">All Departments</option>
+                                {% for dept in ['Computer Science', 'Civil Engineering', 'Electrical Engineering', 'Mechanical Engineering', 'Chemical Engineering', 'Petroleum Engineering', 'Pure & Applied Chemistry', 'Geology', 'Physics', 'Mathematics', 'Statistics', 'Biochemistry', 'Microbiology', 'Plant Science & Biotechnology', 'Animal Science', 'Fisheries', 'Forestry & Wildlife', 'Soil Science', 'Agricultural Economics', 'Agricultural Extension', 'Food Science & Technology', 'Home Science', 'Sociology', 'Psychology', 'Economics', 'Political Science', 'Public Administration', 'Business Administration', 'Accountancy', 'Banking & Finance', 'Marketing', 'Management', 'Law', 'Medicine & Surgery', 'Pharmacy', 'Nursing Science', 'Medical Laboratory Science', 'Anatomy', 'Physiology', 'Radiography', 'Dentistry', 'Fine & Applied Arts', 'Music', 'Theatre Arts', 'English & Literary Studies', 'Linguistics & Communication Studies', 'History & Diplomatic Studies', 'Religious & Cultural Studies', 'Philosophy', 'Civil Law', 'Common Law', 'Islamic Law'] %}
+                                <option value="{{ dept }}">{{ dept }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <select id="levelFilter" class="form-select">
+                                <option value="">All Levels</option>
+                                {% for level in ['100L', '200L', '300L', '400L', '500L'] %}
+                                <option value="{{ level }}">{{ level }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <button id="toggleAllBtn" class="btn btn-outline-primary w-100">
+                                Toggle All
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Student List -->
+                    <form method="POST" action="{{ url_for('add_students_to_exam', exam_id=exam.id) }}">
+                        <div class="table-responsive" style="max-height: 400px; overflow-y: auto;"> {# Added max-height for scrollability #}
+                            <table class="table table-hover">
+                                <thead class="table-light sticky-top"> {# Made header sticky #}
+                                    <tr>
+                                        <th width="5%">
+                                            <input type="checkbox" id="selectAll">
+                                        </th>
+                                        <th>Name</th>
+                                        <th>ID</th>
+                                        <th>Department</th>
+                                        <th>Level</th>
+                                        <th>Status</th> {# This will show Verified/Pending #}
+                                    </tr>
+                                </thead>
+                                <tbody id="studentTable">
+                                    {% for student in students %}
+                                    <tr class="student-row"
+                                        data-name="{{ student.name.lower() }}"
+                                        data-dept="{{ student.department }}"
+                                        data-level="{{ student.level }}"
+                                        data-id="{{ student.student_id }}">
+                                        <td>
+                                            <input type="checkbox"
+                                                    name="student_ids"
+                                                    value="{{ student.student_id }}"
+                                                    {% if student.student_id in participant_ids %}checked{% endif %}>
+                                        </td>
+                                        <td>{{ student.name }}</td>
+                                        <td>{{ student.student_id }}</td>
+                                        <td>{{ student.department }}</td>
+                                        <td>{{ student.level }}</td>
+                                        <td>
+                                            {# Display student's verification status for THIS exam #}
+                                            <span class="badge attendance-badge
+                                                {% if verified_status.get(student.student_id) == 1 %}
+                                                    bg-success
+                                                {% else %}
+                                                    bg-secondary
+                                                {% endif %}"
+                                                data-id="{{ student.student_id }}">
+                                                {% if verified_status.get(student.student_id) == 1 %}
+                                                    Verified
+                                                {% else %}
+                                                    Pending
+                                                {% endif %}
+                                            </span>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div class="mt-3 d-flex justify-content-between align-items-center">
+                            <span id="selectedCount" class="text-muted">0 students selected</span>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-save"></i> Update Participants
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {# NEW SECTION: Exam Participants List - Now a direct table #}
+    <div id="participants-card" class="card shadow-sm mb-4">
+        <div class="card-body">
+            <h5 class="card-title"><i class="bi bi-person-lines-fill me-2"></i>Exam Participants List</h5>
+            <p class="card-text">Details of all students registered for this exam:</p>
+            
+            <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                <table class="table table-hover table-striped">
+                    <thead class="table-light sticky-top">
+                        <tr>
+                            <th>Name</th>
+                            <th>Student ID</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="participants-table-body">
+                        {# Initial loading state will be shown here, then replaced by JS #}
+                        <tr>
+                            <td colspan="3" class="text-center text-muted py-3">
+                                <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Loading participants...
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <div id="participants-message" class="alert mt-3 d-none" role="alert"></div>
+        </div>
+    </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+console.log("manage_exam.html script started."); // Early debug log
+
+document.addEventListener('DOMContentLoaded', function() {
+    console.log("DOMContentLoaded fired."); // Debug log inside DOMContentLoaded
+
+    // --- DOM Elements ---
+    // Filter/Selection
+    const nameSearch = document.getElementById('nameSearch');
+    const deptFilter = document.getElementById('deptFilter');
+    const levelFilter = document.getElementById('levelFilter');
+    const selectAllCheckbox = document.getElementById('selectAll'); // Renamed for clarity
+    const toggleAllBtn = document.getElementById('toggleAllBtn');
+    const studentTableBody = document.getElementById('studentTable'); // Get the tbody for enrollment
+    const studentRows = Array.from(studentTableBody.querySelectorAll('.student-row')); // Get all rows once
+    const selectedCountSpan = document.getElementById('selectedCount'); // Renamed for clarity
+
+    // Attendance Summary
+    const attendedCountSpan = document.getElementById('attendedCount');
+    const totalParticipantsSpan = document.getElementById('totalParticipants');
+    const attendanceProgressBar = document.getElementById('attendanceProgress');
+
+    // Participants List elements (updated for table)
+    const participantsTableBody = document.getElementById('participants-table-body'); // Changed to target tbody
+    const participantsMessageDiv = document.getElementById('participants-message');
+
+    // --- Data Variables ---
+    // Get exam ID directly from Flask context (assuming 'exam' object is passed)
+    const examId = {{ exam.id | tojson }}; // Use tojson for safe JS injection of numbers/strings
+
+    // Initialize selected students based on current checked checkboxes
+    let selectedStudents = new Set();
+    studentRows.forEach(row => {
+        const checkbox = row.querySelector('input[name="student_ids"]');
+        if (checkbox && checkbox.checked) {
+            selectedStudents.add(checkbox.value);
+        }
+    });
+    updateSelectedCount(); // Call initial count update
+
+    // --- Helper Functions ---
+
+    // Filter functionality for the enrollment table
+    function applyFilters() {
+        console.log('Applying filters...'); // Debug log
+        const nameTerm = nameSearch.value.toLowerCase();
+        const deptValue = deptFilter.value;
+        const levelValue = levelFilter.value;
+
+        let visibleRowsCount = 0;
+        studentRows.forEach(row => {
+            const matchesName = row.dataset.name.includes(nameTerm);
+            const matchesDept = deptValue === '' || row.dataset.dept === deptValue;
+            const matchesLevel = levelValue === '' || row.dataset.level === levelValue;
+
+            if (matchesName && matchesDept && matchesLevel) {
+                row.style.display = '';
+                visibleRowsCount++;
+            } else {
+                row.style.display = 'none';
+            }
+        });
+        console.log(`Visible rows after filter: ${visibleRowsCount}`); // Debug log
+        updateSelectAllState(); // Update select all checkbox based on visible rows
+    }
+
+    // Update the selected student count displayed
+    function updateSelectedCount() {
+        selectedCountSpan.textContent = `${selectedStudents.size} students selected`;
+    }
+
+    // Update the state of the "Select All" checkbox
+    function updateSelectAllState() {
+        const visibleCheckboxes = Array.from(studentTableBody.querySelectorAll('.student-row:not([style*="display: none"]) input[type="checkbox"]'));
+        
+        // If there are no visible checkboxes, selectAll should be unchecked and disabled
+        if (visibleCheckboxes.length === 0) {
+            selectAllCheckbox.checked = false;
+            selectAllCheckbox.disabled = true;
+            return;
+        } else {
+            selectAllCheckbox.disabled = false;
+        }
+
+        // Check if all visible checkboxes are currently selected
+        const allVisibleChecked = visibleCheckboxes.every(checkbox => selectedStudents.has(checkbox.value));
+        selectAllCheckbox.checked = allVisibleChecked;
+    }
+
+    // Function to update attendance summary stats
+    async function updateAttendanceStats() {
+        console.log('Fetching attendance stats...'); // Debug log
+        try {
+            const response = await fetch(`/api/exam/${examId}/attendance_stats`);
+            const data = await response.json();
+            console.log('Attendance stats data received:', data); // Debug log
+
+            attendedCountSpan.textContent = data.attended || 0;
+            totalParticipantsSpan.textContent = data.total || 0;
+            
+            const percentage = data.percentage || 0;
+            attendanceProgressBar.style.width = `${percentage}%`;
+            attendanceProgressBar.setAttribute('aria-valuenow', percentage);
+
+            // OPTIONAL: If you want real-time badge updates from this API,
+            // the /attendance_stats endpoint would need to return per-student verified status.
+            // For now, this just updates the summary numbers.
+        } catch (error) {
+            console.error('Error fetching attendance stats:', error);
+            // Optionally update UI to show error fetching stats
+        }
+    }
+
+    // Load Participants for the "Exam Participants List" section (now loads into a table)
+    async function loadParticipants() {
+        console.log("loadParticipants called for table display."); // Debug log
+        participantsTableBody.innerHTML = `
+            <tr>
+                <td colspan="3" class="text-center text-muted py-3">
+                    <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Loading participants...
+                </td>
+            </tr>
+        `;
+        participantsMessageDiv.classList.add('d-none'); // Hide previous messages
+
+        try {
+            console.log(`Fetching participants from: /api/exam/${examId}/participants`); // Debug log
+            const response = await fetch(`/api/exam/${examId}/participants`);
+            const data = await response.json();
+            console.log('Participants API response:', data); // Debug log
+
+            if (response.ok) {
+                if (data.participants && data.participants.length > 0) {
+                    console.log(`Displaying ${data.participants.length} participants.`); // Debug log
+                    displayParticipants(data.participants);
+                } else {
+                    console.log('No participants returned from API or participants array is empty.'); // Debug log
+                    participantsTableBody.innerHTML = `
+                        <tr>
+                            <td colspan="3" class="text-center text-muted py-3">
+                                <i class="bi bi-info-circle me-2"></i>No participants registered for this exam yet.
+                            </td>
+                        </tr>
+                    `;
+                }
+            } else {
+                const errorMessage = data.message || `Failed to load participants: Server responded with status ${response.status}`;
+                console.error(`API Error: ${errorMessage}`); // Debug log
+                throw new Error(errorMessage);
+            }
+
+        } catch (error) {
+            console.error('Error loading participants:', error); // Debug log
+            participantsTableBody.innerHTML = `
+                <tr>
+                    <td colspan="3" class="text-center text-danger py-3">
+                        <i class="bi bi-exclamation-triangle me-2"></i>Error loading participants: ${error.message}
+                    </td>
+                </tr>
+            `;
+            participantsMessageDiv.classList.remove('d-none'); // Show message div for error
+            participantsMessageDiv.classList.remove('alert-info', 'alert-success');
+            participantsMessageDiv.classList.add('alert-danger');
+            participantsMessageDiv.innerHTML = `<i class="bi bi-exclamation-triangle me-2"></i>Error: ${error.message}`;
+        }
+    }
+
+    // Renders participant data into the table
+    function displayParticipants(participants) {
+        participantsTableBody.innerHTML = ''; // Clear existing content
+        if (participants.length === 0) {
+            participantsTableBody.innerHTML = `
+                <tr>
+                    <td colspan="3" class="text-center text-muted py-3">
+                        <i class="bi bi-info-circle me-2"></i>No participants registered for this exam yet.
+                    </td>
+                </tr>
+            `;
+            return;
+        }
+
+        participants.forEach(participant => {
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td>${participant.name || 'N/A'}</td>
+                <td>${participant.student_id || 'N/A'}</td>
+                <td>
+                    <span class="badge bg-${participant.verified_status === 'verified' ? 'success' : 'warning'}">
+                        ${participant.verified_status ? participant.verified_status.toUpperCase() : 'PENDING'}
+                    </span>
+                </td>
+            `;
+            participantsTableBody.appendChild(row);
+        });
+    }
+
+    // --- Event Listeners ---
+    nameSearch.addEventListener('input', applyFilters);
+    deptFilter.addEventListener('change', applyFilters);
+    levelFilter.addEventListener('change', applyFilters);
+
+    selectAllCheckbox.addEventListener('change', function() {
+        const visibleCheckboxes = studentTableBody.querySelectorAll('.student-row:not([style*="display: none"]) input[type="checkbox"]');
+        visibleCheckboxes.forEach(checkbox => {
+            checkbox.checked = this.checked;
+            if (this.checked) {
+                selectedStudents.add(checkbox.value);
+            } else {
+                selectedStudents.delete(checkbox.value);
+            }
+        });
+        updateSelectedCount();
+    });
+
+    toggleAllBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        const visibleCheckboxes = studentTableBody.querySelectorAll('.student-row:not([style*="display: none"]) input[type="checkbox"]');
+        if (visibleCheckboxes.length === 0) return; // No visible checkboxes to toggle
+
+        const anyUnchecked = Array.from(visibleCheckboxes).some(checkbox => !selectedStudents.has(checkbox.value));
+
+        visibleCheckboxes.forEach(checkbox => {
+            checkbox.checked = anyUnchecked;
+            if (anyUnchecked) {
+                selectedStudents.add(checkbox.value);
+            } else {
+                selectedStudents.delete(checkbox.value);
+            }
+        });
+        updateSelectedCount();
+        updateSelectAllState();
+    });
+
+    studentTableBody.addEventListener('change', function(e) {
+        if (e.target.matches('input[type="checkbox"]')) {
+            const checkbox = e.target;
+            const studentId = checkbox.value;
+            if (checkbox.checked) {
+                selectedStudents.add(studentId);
+            } else {
+                selectedStudents.delete(studentId);
+            }
+            updateSelectedCount();
+            updateSelectAllState(); // Update 'select all' checkbox if an individual one changes
+        }
+    });
+
+    // Removed: viewParticipantsBtn.addEventListener('click', loadParticipants);
+    // Removed: console.log('viewParticipantsBtn element found:', viewParticipantsBtn); 
+
+    // Add loading animation to buttons (existing logic)
+    document.querySelectorAll('a.btn, button.btn').forEach(btn => {
+        btn.addEventListener('click', function (event) {
+            if (this.type === 'submit' && this.closest('form')) {
+                return;
+            }
+            if (this.classList.contains('disabled') || this.disabled || this.querySelector('.spinner-border')) {
+                event.preventDefault();
+                return;
+            }
+            const originalContent = this.innerHTML;
+            this.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Processing...`;
+            this.disabled = true;
+            this.classList.add('disabled');
+            setTimeout(() => {
+                if (this) {
+                    this.innerHTML = originalContent;
+                    this.disabled = false;
+                    this.classList.remove('disabled');
+                }
+            }, 3000);
+        });
+    });
+
+    // --- Initializations on Page Load ---
+    applyFilters(); // Apply initial filters to the enrollment table
+    updateAttendanceStats(); // Load initial attendance summary data
+    setInterval(updateAttendanceStats, 10000); // Auto-refresh attendance stats every 10 seconds
+
+    // NEW: Automatically load participants on page load
+    loadParticipants(); 
+});
+</script>
+{% endblock %}

@@ -1,0 +1,30 @@
+# Python specific ignores
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python/
+env/
+venv/
+.venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.vscode/
+
+# Database and embeddings (Crucial for your app)
+attendance.db
+*.sqlite3
+embeddings/
+uploads/
+*.npy
+
+# Environment variables (if you use a .env file locally)
+.env
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log

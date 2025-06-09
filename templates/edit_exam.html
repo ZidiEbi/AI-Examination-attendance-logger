@@ -1,0 +1,48 @@
+<!-- templates/edit_exam.html -->
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1><i class="bi bi-pencil-square me-2"></i>Edit Exam: {{ exam.title }}</h1>
+        <a href="{{ url_for('list_exams') }}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> Back to Exams
+        </a>
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="card-body">
+            <form method="POST">
+                <div class="mb-3">
+                    <label for="title" class="form-label">Exam Title</label>
+                    <input type="text" class="form-control" id="title" name="title" 
+                           value="{{ exam.title }}" required>
+                </div>
+                <div class="mb-3">
+                    <label for="department" class="form-label">Department</label>
+                    <input type="text" class="form-control" id="department" name="department" 
+                           value="{{ exam.department }}" required>
+                </div>
+                <div class="mb-3">
+                    <label for="level" class="form-label">Level</label>
+                    <input type="text" class="form-control" id="level" name="level" 
+                           value="{{ exam.level }}" required>
+                </div>
+                <div class="mb-3">
+                    <label for="start_time" class="form-label">Start Time</label>
+                    <input type="datetime-local" class="form-control" id="start_time" name="start_time" 
+                           value="{{ exam.start_time.strftime('%Y-%m-%dT%H:%M') }}" required>
+                </div>
+                <div class="mb-3">
+                    <label for="end_time" class="form-label">End Time</label>
+                    <input type="datetime-local" class="form-control" id="end_time" name="end_time" 
+                           value="{{ exam.end_time.strftime('%Y-%m-%dT%H:%M') }}" required>
+                </div>
+                <button type="submit" class="btn btn-primary">
+                    <i class="bi bi-save"></i> Update Exam
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

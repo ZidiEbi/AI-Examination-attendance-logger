@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1><i class="bi bi-calendar-event me-2"></i>Exam Schedule</h1>
+        <a href="{{ url_for('add_exam') }}" class="btn btn-primary">
+            <i class="bi bi-plus-lg"></i> Add Exam
+        </a>
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Title</th>
+                            <th>Department</th>
+                            <th>Level</th>
+                            <th>Date</th>
+                            <th>Time</th>
+                            <th>Actions</th> {# This column will now contain multiple buttons/links #}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for exam in exams %}
+                        <tr>
+                            <td><strong>{{ exam.title }}</strong></td>
+                            <td>{{ exam.department }}</td>
+                            <td><span class="badge bg-info">{{ exam.level }}</span></td>
+                            <td>{{ exam.start_time.strftime('%b %d, %Y') }}</td>
+                            <td>
+                                {{ exam.start_time.strftime('%I:%M %p') }} -
+                                {{ exam.end_time.strftime('%I:%M %p') }}
+                            </td>
+                            <td>
+                                {# --- IMPORTANT CHANGES HERE --- #}
+
+                                {# Button to start student verification for THIS exam #}
+                                <a href="{{ url_for('camera', exam_id=exam.id) }}" class="btn btn-sm btn-success me-1" title="Start Student Verification">
+                                    <i class="bi bi-camera-video"></i> Verify
+                                </a>
+
+                                {# Link to manage participants for THIS exam #}
+                                <a href="{{ url_for('manage_exam', exam_id=exam.id) }}" class="btn btn-sm btn-info me-1" title="Manage Exam Participants">
+                                    <i class="bi bi-person-lines-fill"></i> Manage
+                                </a>
+
+                                {# Link to view attendance report for THIS exam #}
+                                <a href="{{ url_for('attendance_report', exam_id=exam.id) }}" class="btn btn-sm btn-secondary me-1" title="View Attendance Report">
+                                    <i class="bi bi-file-earmark-bar-graph"></i> Report
+                                </a>
+
+                                {# Edit Exam (placeholder for now, assumes you'll have an 'edit_exam' route) #}
+                                {# If you have an 'edit_exam' route like @app.route('/edit_exam/<int:exam_id>', methods=['GET', 'POST']) #}
+                                <a href="{{ url_for('edit_exam', exam_id=exam.id) }}" class="btn btn-sm btn-outline-primary me-1" title="Edit Exam Details">
+                                    <i class="bi bi-pencil"></i> Edit
+                                </a>
+
+                                {# Delete Exam (using a form for POST request for security) #}
+                                {# Assumes you have a 'delete_exam' route like @app.route('/delete_exam/<int:exam_id>', methods=['POST']) #}
+                                <form method="POST" action="{{ url_for('delete_exam', exam_id=exam.id) }}" style="display:inline-block;">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger"
+                                            onclick="return confirm('Are you sure you want to delete exam \'{{ exam.title }}\' and all its associated data (participants, attendance logs)? This action cannot be undone.')"
+                                            title="Delete Exam">
+                                        <i class="bi bi-trash"></i> Delete
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

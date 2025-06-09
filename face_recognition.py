@@ -34,28 +34,19 @@ CREATE TABLE IF NOT EXISTS attendance (
 """)
 conn.commit()
 
-# Load reference embeddings
-def get_face_embedding(image_path):
-    """Extract face embedding from an image."""
-    image = cv2.imread(image_path)
-    faces = app.get(image)
-    if len(faces) == 0:
-        print(f"No face detected in {image_path}")
-        return None
-    return faces[0].normed_embedding  # Return embedding of the first face
+# Load reference embeddings from the database
+def load_reference_embeddings():
+    cursor.execute("SELECT name, embedding FROM reference_embeddings")
+    rows = cursor.fetchall()
+    ref_ids = []
+    ref_embeddings = []
+    for name, embedding_blob in rows:
+        embedding = np.frombuffer(embedding_blob, dtype=np.float32)
+        ref_ids.append(name)
+        ref_embeddings.append(embedding)
+    return ref_ids, np.array(ref_embeddings)
 
-reference_embeddings = {
-    "Alice": get_face_embedding("alice.jpg"),
-    "Bob": get_face_embedding("bob.jpg"),
-    "Charlie": get_face_embedding("charlie.jpg")
-}
-
-# Remove None values (if any)
-reference_embeddings = {k: v for k, v in reference_embeddings.items() if v is not None}
-
-# Convert reference embeddings to a numpy array
-ref_ids = list(reference_embeddings.keys())
-ref_embeddings = np.array(list(reference_embeddings.values()))
+ref_ids, ref_embeddings = load_reference_embeddings()
 
 def compare_embeddings_in_batches(face_embedding, ref_embeddings, batch_size=100):
     """Compare face embedding with reference embeddings in batches."""
@@ -70,7 +61,7 @@ def compare_embeddings_in_batches(face_embedding, ref_embeddings, batch_size=100
             best_match_id = ref_ids[i + max_score_idx]
     return best_match_id, best_match_score
 
-def calculate_dynamic_threshold(ref_embeddings, face_embedding):
+def calculate_dynamic_threshold(ref_embeddings, face_embedding): 
     """Calculate a dynamic threshold based on reference embeddings and the current face embedding."""
     mean_distance = np.mean(np.dot(ref_embeddings, face_embedding))
     return mean_distance * 0.8  # Example threshold calculation

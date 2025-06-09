@@ -1,0 +1,277 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <!-- Page Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1><i class="bi bi-speedometer2 me-2"></i>Admin Dashboard</h1>
+        <div>
+            <a href="{{ url_for('list_students') }}" class="btn btn-info me-2">
+                <i class="bi bi-people-fill"></i> View All Students
+            </a>
+        </div>
+    </div>
+
+    <!-- Quick Actions Row -->
+    <div class="row mb-4 g-4">
+        <div class="col-md-6">
+            <div class="card shadow-sm h-100">
+                <div class="card-body">
+                    <h5 class="card-title"><i class="bi bi-upload me-2"></i>Bulk Student Registration</h5>
+                    <p class="card-text">Upload student data and photos in bulk format.</p>
+                    <a href="{{ url_for('bulk_upload') }}" class="btn btn-primary">
+                        <i class="bi bi-file-earmark-spreadsheet"></i> Upload CSV + Photos
+                    </a>
+                    <small class="text-muted d-block mt-2">
+                        Required format: name,student_id,department,level
+                    </small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card shadow-sm h-100">
+                <div class="card-body">
+                    <h5 class="card-title"><i class="bi bi-download me-2"></i>Export Data</h5>
+                    <p class="card-text">Download complete student records for backup.</p>
+                    <a href="{{ url_for('export_students') }}" class="btn btn-success">
+                        <i class="bi bi-file-earmark-excel"></i> Export Students as CSV
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Students Card -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 class="card-title mb-0"><i class="bi bi-person-lines-fill me-2"></i>Recent Students</h5>
+                <div>
+                    <a href="{{ url_for('list_students') }}" class="btn btn-sm btn-outline-primary">
+                        <i class="bi bi-arrow-right"></i> View All
+                    </a>
+                </div>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Photo</th>
+                            <th>Name</th>
+                            <th>Student ID</th>
+                            <th>Department</th>
+                            <th>Level</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for student in students %}
+                        <tr>
+                            <td data-label="Photo">
+                                <div class="passport-photo-container-sm">
+                                    <img src="{{ url_for('static', filename='images/students/' + student.student_id + '.jpg') }}"
+                                        class="passport-photo" alt="{{ student.name }}"
+                                        onerror="this.src='{{ url_for('static', filename='images/default-passport.jpg') }}'">
+                                </div>
+                            </td>
+                            <td data-label="Name">{{ student.name }}</td>
+                            <td data-label="ID"><span class="badge bg-secondary">{{ student.student_id }}</span></td>
+                            <td data-label="Department">{{ student.department }}</td>
+                            <td data-label="Level"><span class="badge bg-primary">{{ student.level }}</span></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scheduled Exams Card -->
+    <div class="card shadow-sm">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 class="card-title mb-0"><i class="bi bi-calendar-event me-2"></i>Scheduled Exams</h5>
+                <a href="{{ url_for('add_exam') }}" class="btn btn-sm btn-outline-secondary">
+                    <i class="bi bi-plus-lg"></i> Add Exam
+                </a>
+            </div>
+
+            {% if exams %}
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Title</th>
+                            <th>Department</th>
+                            <th>Level</th>
+                            <th>Date</th>
+                            <th>Time</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for exam in exams %}
+                        <!-- In admin_dashboard.html -->
+                        <tr onclick="window.location='{{ url_for('manage_exam', exam_id=exam.id) }}'" class="exam-row">
+                            <td>{{ exam.title }}</td>
+                            <td>{{ exam.department }}</td>
+                            <td><span class="badge bg-primary">{{ exam.level }}</span></td>
+                            <td>{{ exam.start_time.strftime('%Y-%m-%d') }}</td>
+                            <td>
+                                {{ exam.start_time.strftime('%H:%M') }} - {{ exam.end_time.strftime('%H:%M') }}
+                            </td>
+                            <td>
+                                <a href="{{ url_for('manage_exam', exam_id=exam.id) }}"
+                                    class="btn btn-sm btn-outline-primary">
+                                    Manage
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="alert alert-info">
+                No exams scheduled yet. <a href="{{ url_for('add_exam') }}">Add your first exam</a>.
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <style>
+        /* ===== CORE STYLES ===== */
+        .object-fit-cover {
+            object-fit: cover;
+        }
+
+        .card {
+            border: none;
+            border-radius: 10px;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .card-title {
+            color: #3a3a3a;
+        }
+
+        .table th {
+            white-space: nowrap;
+            font-weight: 500;
+        }
+
+        .badge {
+            font-weight: 500;
+            padding: 5px 8px;
+            font-size: 0.8em;
+            letter-spacing: 0.5px;
+        }
+
+        /* ===== PASSPORT PHOTOS ===== */
+        .passport-photo-container-sm {
+            width: 50px;
+            height: 60px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: #f0f0f0;
+            border: 1px solid #ddd;
+            overflow: hidden;
+            margin: 0 auto;
+        }
+
+        .passport-photo {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            object-position: center top;
+        }
+
+        /* ===== MOBILE RESPONSIVENESS ===== */
+        @media (max-width: 768px) {
+            .table-responsive {
+                border: 0;
+            }
+
+            .table thead {
+                display: none;
+            }
+
+            .table tr {
+                display: block;
+                margin-bottom: 1rem;
+                border: 1px solid #dee2e6;
+            }
+
+            .table td {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                border-bottom: 1px solid #dee2e6;
+            }
+
+            .table td::before {
+                content: attr(data-label);
+                font-weight: bold;
+                margin-right: 1rem;
+                min-width: 100px;
+            }
+
+            .passport-photo-container-sm {
+                width: 40px;
+                height: 50px;
+            }
+        }
+
+        /* Make table rows hoverable */
+        .table-hover tbody tr:hover {
+            background-color: rgba(0, 123, 255, 0.05);
+        }
+
+        /* Checkbox styling */
+        input[type="checkbox"] {
+            transform: scale(1.2);
+            cursor: pointer;
+        }
+
+        /* Selected count highlight */
+        #selectedCount {
+            font-weight: 500;
+        }
+    </style>
+    .exam-row {
+    cursor: pointer;
+    }
+    </style>
+    {% block scripts %}
+    <script>
+        // Add loading animation to buttons
+        document.querySelectorAll('a.btn').forEach(btn => {
+            btn.addEventListener('click', function () {
+                const originalContent = this.innerHTML;
+                this.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Processing...`;
+
+                // Revert after 3 seconds if still on page
+                setTimeout(() => {
+                    if (this) this.innerHTML = originalContent;
+                }, 3000);
+            });
+        });
+        // Auto-refresh every 60 seconds
+        setTimeout(() => {
+            window.location.reload();
+        }, 60000);
+
+        // Add loading animation to all buttons
+        document.querySelectorAll('a.btn').forEach(btn => {
+            btn.addEventListener('click', function () {
+                this.innerHTML = `<span class="spinner-border spinner-border-sm" role="status"></span> Processing`;
+            });
+        });
+    </script>
+    {% endblock %}
+    {% endblock %}
