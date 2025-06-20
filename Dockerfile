@@ -16,7 +16,7 @@ RUN apt-get update && apt-get install -y \
     libsm6 \
     libxext6 \
     libxrender-dev \
-    libgl1-mesa-glx \ # ADDED THIS LINE TO FIX libGL.so.1 ERROR
+    libgl1-mesa-glx \
     # Clean up apt lists to reduce image size
     && rm -rf /var/lib/apt/lists/*
 
@@ -60,3 +60,4 @@ EXPOSE 5000
 
 # Command to run the application using Gunicorn
 CMD ["gunicorn", "app:app", "--bind", "0.0.0.0:5000", "--timeout", "120"]
+# Note: The timeout is set to 120 seconds to allow for longer processing times.
