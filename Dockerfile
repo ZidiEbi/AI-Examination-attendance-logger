@@ -40,10 +40,12 @@ RUN mkdir -p uploads \
            static/images \
     && chmod -R 777 uploads embeddings static/images/students # Adjust permissions as needed for your setup
 
-
-# Create the default passport image if Pillow is available
-# This ensures it's baked into the image, reducing runtime cold start/error
-RUN python -c "import os; from PIL import Image, ImageDraw, ImageFont;     default_passport_path = 'static/images/default-passport.jpg';     if not os.path.exists(default_passport_path):         print('Generating default passport image...');         img = Image.new('RGB', (413, 531), color=(200, 200, 200));         d = ImageDraw.Draw(img);         try: font = ImageFont.truetype('arial.ttf', 40);         except IOError: font = ImageFont.load_default();         text_bbox = d.textbbox((0,0), 'No Photo', font=font);         text_width = text_bbox[2] - text_bbox[0];         text_height = text_bbox[3] - text_bbox[1];         x = (img.width - text_width) / 2;         y = (img.height - text_height) / 2;         d.text((x, y), 'No Photo', fill=(100,100,100), font=font);         img.save(default_passport_path);         print('Default passport image generated.');     else: print('Default passport image already exists.');\""
+# --- CRITICAL CHANGE HERE ---
+# Instead of embedding long Python code directly, we copy and run a separate script.
+# This avoids syntax errors caused by shell escaping.
+COPY generate_default_image.py .
+RUN python generate_default_image.py
+# --- END CRITICAL CHANGE ---
 
 # Expose the port your Flask app will run on
 EXPOSE 5000
