@@ -43,15 +43,17 @@ from insightface.app import FaceAnalysis
 
 # --- FIX: Specify a custom root for InsightFace models within our persistent volume ---
 # We'll use a sub-directory within the 'uploads' persistent volume for InsightFace models.
+# The Dockerfile now ensures that 'uploads/insightface_models/buffalo_l' exists and contains the model.
 INSIGHTFACE_MODEL_ROOT = os.path.join(app.config['UPLOAD_FOLDER'], 'insightface_models')
-# Ensure this directory exists before InsightFace tries to use it.
-# This mkdir should run within the Gunicorn worker's process at startup.
-os.makedirs(INSIGHTFACE_MODEL_ROOT, exist_ok=True) 
+# The os.makedirs for INSIGHTFACE_MODEL_ROOT is now handled by the Dockerfile.
+# You can keep it here for local development if desired, but it's redundant in the deployed environment.
+# os.makedirs(INSIGHTFACE_MODEL_ROOT, exist_ok=True) 
 
 # Initialize FaceAnalysis with the custom root.
-# This tells InsightFace where to look for and download models.
+# This tells InsightFace where to look for the pre-downloaded 'buffalo_l' model.
 face_app = FaceAnalysis(name="buffalo_l", root=INSIGHTFACE_MODEL_ROOT, providers=['CPUExecutionProvider'])
-# Prepare the app; this is where the model download and loading happens.
+# Prepare the app. Since the model is already downloaded in the Docker image,
+# this step should now be very fast as it will simply load the model.
 face_app.prepare(ctx_id=0)
 
 # --- Database Models ---
@@ -264,7 +266,8 @@ def bulk_upload():
                         img = cv2.imread(temp_path)
                         if img is not None:
                             img = cv2.resize(img, (413, 531))
-                            final_path = os.path.join(images_dir, f"{clean_id}.jpg")
+                            # FIX: Changed `clean_id` to `student_id_from_filename` for consistency
+                            final_path = os.path.join(images_dir, f"{student_id_from_filename}.jpg") 
                             cv2.imwrite(final_path, img)
                         os.remove(temp_path)
             
@@ -554,7 +557,7 @@ def verify_student_for_exam(exam_id):
             return jsonify({'status': 'error', 'message': 'No students registered for this exam.', 'bbox': detected_bbox})
 
         for participant_record in participants_data:
-            student = participant.student # Access the eagerly loaded student object
+            student = participant_record.student # Access the eagerly loaded student object
 
             embedding_path = student.embedding_path
             if not os.path.exists(embedding_path):
