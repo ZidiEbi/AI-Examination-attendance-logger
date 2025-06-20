@@ -10,6 +10,7 @@ WORKDIR /app
 # libsm6 and libxrender1 might be needed for InsightFace or other image libraries
 # build-essential is for compiling packages with pip, will be removed later
 # libfreetype6-dev is crucial for Pillow's font rendering capabilities
+# fontconfig and fonts-dejavu-core provide necessary font configurations and actual font files for Pillow
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         build-essential \
@@ -19,6 +20,8 @@ RUN apt-get update && \
         libxrender1 \
         ffmpeg \
         libfreetype6-dev \
+        fontconfig \
+        fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements.txt and install Python dependencies
