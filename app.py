@@ -26,9 +26,9 @@ app = Flask(__name__)
 # --- Configuration for Production and Development ---
 # Get secret key from environment variable, fallback for development
 app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'your-super-secret-key-development-only') 
-app.config['UPLOAD_FOLDER'] = 'uploads'
+app.config['UPLOAD_FOLDER'] = 'uploads' # This is already a persistent volume mount point
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB limit
-os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True) # Ensure this base path for uploads exists
 
 # Database Configuration (PostgreSQL)
 # Get database URL from environment variable, fallback for local testing (adjust as needed)
@@ -40,7 +40,18 @@ db = SQLAlchemy(app)
 
 # Face recognition setup
 from insightface.app import FaceAnalysis
-face_app = FaceAnalysis(name="buffalo_l", providers=['CPUExecutionProvider'])
+
+# --- FIX: Specify a custom root for InsightFace models within our persistent volume ---
+# We'll use a sub-directory within the 'uploads' persistent volume for InsightFace models.
+INSIGHTFACE_MODEL_ROOT = os.path.join(app.config['UPLOAD_FOLDER'], 'insightface_models')
+# Ensure this directory exists before InsightFace tries to use it.
+# This mkdir should run within the Gunicorn worker's process at startup.
+os.makedirs(INSIGHTFACE_MODEL_ROOT, exist_ok=True) 
+
+# Initialize FaceAnalysis with the custom root.
+# This tells InsightFace where to look for and download models.
+face_app = FaceAnalysis(name="buffalo_l", root=INSIGHTFACE_MODEL_ROOT, providers=['CPUExecutionProvider'])
+# Prepare the app; this is where the model download and loading happens.
 face_app.prepare(ctx_id=0)
 
 # --- Database Models ---
@@ -132,6 +143,11 @@ def generate_embedding(image_path, output_path):
     print(f"Embedding saved to {output_path}") # Debugging print
     return True
 
+# Health check endpoint for Render
+@app.route('/health')
+def health_check():
+    return jsonify({'status': 'healthy'}), 200
+
 # Routes
 @app.route('/')
 def index():
@@ -153,11 +169,6 @@ def logout():
     session.clear()
     flash('You have been logged out.', 'info')
     return redirect(url_for('index'))
-
-# Health check endpoint for Render
-@app.route('/health')
-def health_check():
-    return jsonify({'status': 'healthy'}), 200
 
 @app.route('/admin')
 @login_required
@@ -253,7 +264,7 @@ def bulk_upload():
                         img = cv2.imread(temp_path)
                         if img is not None:
                             img = cv2.resize(img, (413, 531))
-                            final_path = os.path.join(images_dir, f"{student_id_from_filename}.jpg")
+                            final_path = os.path.join(images_dir, f"{clean_id}.jpg")
                             cv2.imwrite(final_path, img)
                         os.remove(temp_path)
             
@@ -543,7 +554,7 @@ def verify_student_for_exam(exam_id):
             return jsonify({'status': 'error', 'message': 'No students registered for this exam.', 'bbox': detected_bbox})
 
         for participant_record in participants_data:
-            student = participant_record.student # Access the eagerly loaded student object
+            student = participant.student # Access the eagerly loaded student object
 
             embedding_path = student.embedding_path
             if not os.path.exists(embedding_path):
@@ -767,9 +778,9 @@ if __name__ == '__main__':
             text_height = text_bbox[3] - text_bbox[1]
             x = (img.width - text_width) / 2
             y = (img.height - text_height) / 2
-            d.text((x, y), text, fill=(100,100,100), font=font)
+            d.text((x, y), 'No Photo', fill=(100,100,100), font=font);
             img.save(default_passport_path)
-            print(f"Generated placeholder: {default_passport_path}")
+            print('Default passport image generated.')
         except Exception as e:
             print(f"Error generating default-passport.jpg: {e}")
             print("Please ensure Pillow is installed (`pip install Pillow`) and check permissions.")
