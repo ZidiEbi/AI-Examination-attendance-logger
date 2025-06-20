@@ -4,5 +4,5 @@ Flask-SQLAlchemy==3.0.3
 numpy==1.25.0
 opencv-python==4.7.0.72
 insightface==0.7.3
-PyMySQL==1.0.2  # For MySQL connection
+psycopg2-binary==2.9.9 # For PostgreSQL connection
 gunicorn==20.1.0 # Production WSGI server

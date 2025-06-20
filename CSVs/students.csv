@@ -1,0 +1,3 @@
+id,name,student_id,department,level,embedding_path
+1,Zidideke Ebikake,FUO-17-CVE-4860,Civil Engineering,400L,embeddings/FUO-17-CVE-4860.npy
+2,Francis Christan Micah,fuo-20-csi-14355,Computer Science,400,embeddings/fuo-20-csi-14355.npy

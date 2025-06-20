@@ -1,0 +1,15 @@
+exam_id,student_id,verified
+1,fuo-20-csi-14355,0
+1,FUO-17-CVE-4860,0
+4,fuo-20-csi-14355,0
+4,FUO-17-CVE-4860,0
+3,fuo-20-csi-14355,0
+3,FUO-17-CVE-4860,1
+8,fuo-20-csi-14355,0
+8,FUO-17-CVE-4860,0
+6,fuo-20-csi-14355,0
+6,FUO-17-CVE-4860,0
+9,fuo-20-csi-14355,0
+9,FUO-17-CVE-4860,1
+10,fuo-20-csi-14355,0
+10,FUO-17-CVE-4860,1
