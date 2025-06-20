@@ -11,6 +11,7 @@ import shutil
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy import text # Import text for raw SQL queries
+from sqlalchemy.orm import Mapped, mapped_column # For modern SQLAlchemy type hinting
 
 # Pillow is needed for generating a default passport image if one doesn't exist.
 try:
@@ -29,55 +30,52 @@ app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB limit
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
-# Database Configuration (MySQL)
+# Database Configuration (PostgreSQL)
 # Get database URL from environment variable, fallback for local testing (adjust as needed)
-# Example: mysql+pymysql://user:password@host:port/database_name
-app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'mysql+pymysql://root:@localhost/attendance_db')
+# Example for local PostgreSQL: postgresql://user:password@localhost:5432/database_name
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'postgresql://postgres:mysecretpassword@localhost:5432/attendance_db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False # Disable tracking modifications for performance
 
 db = SQLAlchemy(app)
 
 # Face recognition setup
 from insightface.app import FaceAnalysis
-# It's good practice to ensure model download paths are handled if needed,
-# though insightface usually handles this internally.
-# For production, consider pre-downloading models to avoid runtime delays.
 face_app = FaceAnalysis(name="buffalo_l", providers=['CPUExecutionProvider'])
 face_app.prepare(ctx_id=0)
 
 # --- Database Models ---
 class Student(db.Model):
     __tablename__ = 'students'
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(255), nullable=False)
-    student_id = db.Column(db.String(50), unique=True, nullable=False)
-    department = db.Column(db.String(100), nullable=False)
-    level = db.Column(db.String(10), nullable=False)
-    embedding_path = db.Column(db.String(255), nullable=False)
+    id: Mapped[int] = mapped_column(db.Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(db.String(255), nullable=False)
+    student_id: Mapped[str] = mapped_column(db.String(50), unique=True, nullable=False)
+    department: Mapped[str] = mapped_column(db.String(100), nullable=False)
+    level: Mapped[str] = mapped_column(db.String(10), nullable=False)
+    embedding_path: Mapped[str] = mapped_column(db.String(255), nullable=False)
 
     def __repr__(self):
         return f'<Student {self.student_id}>'
 
 class Exam(db.Model):
     __tablename__ = 'exams'
-    id = db.Column(db.Integer, primary_key=True)
-    title = db.Column(db.String(255), nullable=False)
-    department = db.Column(db.String(100), nullable=False)
-    level = db.Column(db.String(10), nullable=False)
-    start_time = db.Column(db.DateTime, nullable=False)
-    end_time = db.Column(db.DateTime, nullable=False)
-    status = db.Column(db.String(20), default='scheduled') # 'scheduled', 'active', 'completed'
+    id: Mapped[int] = mapped_column(db.Integer, primary_key=True)
+    title: Mapped[str] = mapped_column(db.String(255), nullable=False)
+    department: Mapped[str] = mapped_column(db.String(100), nullable=False)
+    level: Mapped[str] = mapped_column(db.String(10), nullable=False)
+    start_time: Mapped[datetime] = mapped_column(db.DateTime, nullable=False)
+    end_time: Mapped[datetime] = mapped_column(db.DateTime, nullable=False)
+    status: Mapped[str] = mapped_column(db.String(20), default='scheduled') # 'scheduled', 'active', 'completed'
 
     def __repr__(self):
         return f'<Exam {self.title}>'
 
 class ExamParticipant(db.Model):
     __tablename__ = 'exam_participants'
-    exam_id = db.Column(db.Integer, db.ForeignKey('exams.id', ondelete='CASCADE'), primary_key=True)
-    student_id = db.Column(db.String(50), db.ForeignKey('students.student_id', ondelete='CASCADE'), primary_key=True)
-    verified = db.Column(db.Integer, default=0) # 0 for pending, 1 for verified
+    exam_id: Mapped[int] = mapped_column(db.Integer, db.ForeignKey('exams.id', ondelete='CASCADE'), primary_key=True)
+    student_id: Mapped[str] = mapped_column(db.String(50), db.ForeignKey('students.student_id', ondelete='CASCADE'), primary_key=True)
+    verified: Mapped[int] = mapped_column(db.Integer, default=0) # 0 for pending, 1 for verified
 
-    # Relationships
+    # Relationships (Optional, but good for Flask-SQLAlchemy)
     exam = db.relationship('Exam', backref=db.backref('participants_link', lazy=True))
     student = db.relationship('Student', backref=db.backref('exams_participated', lazy=True))
 
@@ -86,11 +84,11 @@ class ExamParticipant(db.Model):
 
 class AttendanceLog(db.Model):
     __tablename__ = 'attendance_logs'
-    id = db.Column(db.Integer, primary_key=True)
-    exam_id = db.Column(db.Integer, db.ForeignKey('exams.id', ondelete='CASCADE'), nullable=False)
-    student_id = db.Column(db.String(50), db.ForeignKey('students.student_id', ondelete='CASCADE'), nullable=False)
-    timestamp = db.Column(db.DateTime, default=datetime.now)
-    confidence = db.Column(db.Float, nullable=False)
+    id: Mapped[int] = mapped_column(db.Integer, primary_key=True)
+    exam_id: Mapped[int] = mapped_column(db.Integer, db.ForeignKey('exams.id', ondelete='CASCADE'), nullable=False)
+    student_id: Mapped[str] = mapped_column(db.String(50), db.ForeignKey('students.student_id', ondelete='CASCADE'), nullable=False)
+    timestamp: Mapped[datetime] = mapped_column(db.DateTime, default=datetime.now)
+    confidence: Mapped[float] = mapped_column(db.Float, nullable=False)
 
     # Relationships
     exam = db.relationship('Exam', foreign_keys=[exam_id], backref=db.backref('attendance_records', lazy=True))
@@ -100,9 +98,9 @@ class AttendanceLog(db.Model):
         return f'<AttendanceLog ExamID:{self.exam_id} StudentID:{self.student_id} Timestamp:{self.timestamp}>'
 
 # --- Database Initialization (using Flask-SQLAlchemy) ---
-# This function will create tables based on models if they don't exist
-# In production, you'd typically use Alembic for migrations, but for simplicity here,
-# db.create_all() is used.
+# This ensures tables are created when the app starts.
+# In production, for schema changes, you'd typically use Alembic for migrations,
+# but for initial setup, db.create_all() is fine.
 with app.app_context():
     db.create_all()
 
@@ -156,12 +154,17 @@ def logout():
     flash('You have been logged out.', 'info')
     return redirect(url_for('index'))
 
+# Health check endpoint for Render
+@app.route('/health')
+def health_check():
+    return jsonify({'status': 'healthy'}), 200
+
 @app.route('/admin')
 @login_required
 def admin_dashboard():
     # Use SQLAlchemy queries
-    exams = Exam.query.order_by(Exam.start_time.desc()).limit(5).all()
-    students = Student.query.order_by(Student.id.desc()).limit(5).all()
+    exams = db.session.execute(db.select(Exam).order_by(Exam.start_time.desc()).limit(5)).scalars().all()
+    students = db.session.execute(db.select(Student).order_by(Student.id.desc()).limit(5)).scalars().all()
     
     return render_template('admin_dashboard.html', 
                            exams=exams,
@@ -174,15 +177,15 @@ def list_students():
     per_page = 20
     search = request.args.get('search', '').strip()
     
-    query = Student.query
+    query = db.select(Student)
     if search:
         search_pattern = f"%{search}%"
         query = query.filter(
-            (Student.name.like(search_pattern)) | 
-            (Student.student_id.like(search_pattern))
+            (Student.name.ilike(search_pattern)) | # ilike for case-insensitive
+            (Student.student_id.ilike(search_pattern))
         )
     
-    pagination = query.paginate(page=page, per_page=per_page, error_out=False)
+    pagination = db.paginate(query.order_by(Student.name), page=page, per_page=per_page, error_out=False)
     students = pagination.items
     total_pages = pagination.pages
     
@@ -197,7 +200,7 @@ def list_students():
 def export_students():
     """Export all students as CSV"""
     try:
-        students = Student.query.order_by(Student.name).all()
+        students = db.session.execute(db.select(Student).order_by(Student.name)).scalars().all()
         
         csv_data = "Name,Student ID,Department,Level\n"
         csv_data += "\n".join(
@@ -273,7 +276,7 @@ def bulk_upload():
                     if os.path.exists(img_path):
                         if generate_embedding(img_path, embedding_output_path):
                             try:
-                                existing_student = Student.query.filter_by(student_id=student_id).first()
+                                existing_student = db.session.execute(db.select(Student).filter_by(student_id=student_id)).scalar_one_or_none()
 
                                 if existing_student:
                                     existing_student.name = row['name']
@@ -333,7 +336,7 @@ def bulk_upload():
 @app.route('/camera/<int:exam_id>')
 @login_required
 def camera(exam_id):
-    exam_details = Exam.query.get(exam_id)
+    exam_details = db.session.execute(db.select(Exam).filter_by(id=exam_id)).scalar_one_or_none()
     if not exam_details:
         flash(f"Exam with ID {exam_id} not found.", 'error')
         return redirect(url_for('list_exams'))
@@ -351,17 +354,17 @@ def download_template():
 @app.route('/admin/exams/<int:exam_id>/manage')
 @login_required
 def manage_exam(exam_id):
-    exam = Exam.query.get(exam_id)
+    exam = db.session.execute(db.select(Exam).filter_by(id=exam_id)).scalar_one_or_none()
     if not exam:
         flash(f"Exam with ID {exam_id} not found.", 'error')
         return redirect(url_for('list_exams'))
     
     # Fetch participant_ids and their verification status
-    participants = ExamParticipant.query.filter_by(exam_id=exam_id).all()
-    participant_ids = [p.student_id for p in participants]
-    verified_status = {p.student_id: p.verified for p in participants}
+    participants_query = db.session.execute(db.select(ExamParticipant).filter_by(exam_id=exam_id)).scalars().all()
+    participant_ids = [p.student_id for p in participants_query]
+    verified_status = {p.student_id: p.verified for p in participants_query}
     
-    students = Student.query.order_by(Student.name).all()
+    students = db.session.execute(db.select(Student).order_by(Student.name)).scalars().all()
     
     return render_template('manage_exam.html', 
                            exam=exam,
@@ -372,7 +375,7 @@ def manage_exam(exam_id):
 @app.route('/admin/exams/<int:exam_id>/edit', methods=['GET', 'POST'])
 @login_required
 def edit_exam(exam_id):
-    exam = Exam.query.get(exam_id)
+    exam = db.session.execute(db.select(Exam).filter_by(id=exam_id)).scalar_one_or_none()
     if not exam:
         flash('Exam not found!', 'error')
         return redirect(url_for('list_exams'))
@@ -399,7 +402,7 @@ def edit_exam(exam_id):
             flash('Exam updated successfully!', 'success')
             return redirect(url_for('manage_exam', exam_id=exam_id))
         except ValueError as e:
-            flash(f'Invalid date format: {str(e)}. Please use YYYY-MM-DDTHH:MM.', 'error')
+            flash(f'Invalid date format: {str(e)}. Please useYYYY-MM-DDTHH:MM.', 'error')
         except SQLAlchemyError as e:
             db.session.rollback()
             flash(f'Error updating exam: {str(e)}', 'error')
@@ -414,7 +417,7 @@ def edit_exam(exam_id):
 def delete_exam(exam_id):
     """Delete an exam and its participants and attendance logs."""
     try:
-        exam_to_delete = Exam.query.get(exam_id)
+        exam_to_delete = db.session.execute(db.select(Exam).filter_by(id=exam_id)).scalar_one_or_none()
         if exam_to_delete:
             db.session.delete(exam_to_delete)
             db.session.commit()
@@ -434,12 +437,12 @@ def add_students_to_exam(exam_id):
     
     try:
         # Delete existing participants for this exam first
-        ExamParticipant.query.filter_by(exam_id=exam_id).delete()
+        db.session.query(ExamParticipant).filter_by(exam_id=exam_id).delete()
         
         # Add new participants
         for student_id in student_ids:
             # Check if student_id actually exists in the Student table before adding
-            if Student.query.filter_by(student_id=student_id).first():
+            if db.session.execute(db.select(Student).filter_by(student_id=student_id)).scalar_one_or_none():
                 new_participant = ExamParticipant(exam_id=exam_id, student_id=student_id, verified=0)
                 db.session.add(new_participant)
             else:
@@ -488,7 +491,7 @@ def add_exam():
             return redirect(url_for('list_exams'))
             
         except ValueError as e:
-            flash(f'Invalid date format: {str(e)}. Please use YYYY-MM-DDTHH:MM.', 'error')
+            flash(f'Invalid date format: {str(e)}. Please useYYYY-MM-DDTHH:MM.', 'error')
         except SQLAlchemyError as e:
             db.session.rollback()
             flash(f'Error creating exam: {str(e)}', 'error')
@@ -500,14 +503,14 @@ def add_exam():
 @app.route('/admin/exams')
 @login_required
 def list_exams():
-    exams = Exam.query.order_by(Exam.start_time.desc()).all()
+    exams = db.session.execute(db.select(Exam).order_by(Exam.start_time.desc())).scalars().all()
     return render_template('exam_list.html', exams=exams)
 
 @app.route('/api/exam/<int:exam_id>/verify', methods=['POST'])
 @login_required
 def verify_student_for_exam(exam_id): 
     try:
-        exam = Exam.query.get(exam_id)
+        exam = db.session.execute(db.select(Exam).filter_by(id=exam_id)).scalar_one_or_none()
         if not exam or exam.status != 'active':
             return jsonify({'status': 'error', 'message': 'Exam is not active for verification.', 'bbox': None}), 400
 
@@ -529,21 +532,18 @@ def verify_student_for_exam(exam_id):
         best_score = 0.0
         VERIFICATION_THRESHOLD = 0.5 # Adjustable threshold
 
-        students_for_exam_participants = ExamParticipant.query.filter_by(exam_id=exam_id).all()
-        student_ids_in_exam = [p.student_id for p in students_for_exam_participants]
+        # Fetch participants with their student data eagerly
+        participants_data = db.session.execute(
+            db.select(ExamParticipant).filter_by(exam_id=exam_id).options(
+                db.joinedload(ExamParticipant.student)
+            )
+        ).scalars().all()
         
-        # Eagerly load students for better performance in loop if many participants
-        students_data = Student.query.filter(Student.student_id.in_(student_ids_in_exam)).all()
-        student_map = {s.student_id: s for s in students_data}
-
-        if not student_ids_in_exam:
+        if not participants_data:
             return jsonify({'status': 'error', 'message': 'No students registered for this exam.', 'bbox': detected_bbox})
 
-        for participant in students_for_exam_participants:
-            student = student_map.get(participant.student_id)
-            if not student:
-                print(f"Warning: Student object not found for participant {participant.student_id}")
-                continue
+        for participant_record in participants_data:
+            student = participant_record.student # Access the eagerly loaded student object
 
             embedding_path = student.embedding_path
             if not os.path.exists(embedding_path):
@@ -563,11 +563,13 @@ def verify_student_for_exam(exam_id):
                 best_match = student
 
         if best_match and best_score > VERIFICATION_THRESHOLD:
-            participant_record = ExamParticipant.query.filter_by(
-                exam_id=exam_id, student_id=best_match.student_id
-            ).first()
+            participant_record_for_update = db.session.execute(
+                db.select(ExamParticipant).filter_by(
+                    exam_id=exam_id, student_id=best_match.student_id
+                )
+            ).scalar_one_or_none()
 
-            if participant_record and participant_record.verified == 1:
+            if participant_record_for_update and participant_record_for_update.verified == 1:
                 return jsonify({
                     'status': 'already_verified',
                     'student_id': best_match.student_id,
@@ -586,15 +588,15 @@ def verify_student_for_exam(exam_id):
             db.session.add(new_log)
             
             # Mark as verified in exam_participants
-            if participant_record:
-                participant_record.verified = 1
+            if participant_record_for_update:
+                participant_record_for_update.verified = 1
             else:
                 # This case should ideally not happen if students_for_exam_participants was accurate
-                # but adds robustness if a student was added to logs without being a participant first.
-                # In a real app, you'd ensure this participant exists from exam_participants query.
-                print(f"Warning: Participant record not found for {best_match.student_id} in exam {exam_id}. Creating new.")
-                new_participant = ExamParticipant(exam_id=exam_id, student_id=best_match.student_id, verified=1)
-                db.session.add(new_participant)
+                # but adds robustness if a student was somehow verified without being an official participant
+                print(f"Warning: Participant record not found for {best_match.student_id} in exam {exam_id}. This should not happen if data integrity is maintained.")
+                # If you absolutely want to create it:
+                # new_participant = ExamParticipant(exam_id=exam_id, student_id=best_match.student_id, verified=1)
+                # db.session.add(new_participant)
 
             db.session.commit()
             
@@ -625,7 +627,7 @@ def verify_student_for_exam(exam_id):
 @login_required
 def start_exam(exam_id):
     try:
-        exam = Exam.query.get(exam_id)
+        exam = db.session.execute(db.select(Exam).filter_by(id=exam_id)).scalar_one_or_none()
         if exam:
             exam.status = 'active'
             db.session.commit()
@@ -641,7 +643,7 @@ def start_exam(exam_id):
 @login_required
 def end_exam(exam_id):
     try:
-        exam = Exam.query.get(exam_id)
+        exam = db.session.execute(db.select(Exam).filter_by(id=exam_id)).scalar_one_or_none()
         if exam:
             exam.status = 'completed'
             db.session.commit()
@@ -657,14 +659,18 @@ def end_exam(exam_id):
 @login_required
 def attendance_report(exam_id):
     # Eagerly load relationships to avoid N+1 queries if accessing them in loop
-    participants = ExamParticipant.query.filter_by(exam_id=exam_id).options(
-        db.joinedload(ExamParticipant.student)
-    ).all()
+    participants = db.session.execute(
+        db.select(ExamParticipant).filter_by(exam_id=exam_id).options(
+            db.joinedload(ExamParticipant.student)
+        ).order_by(ExamParticipant.student_id) # Order by student_id from participant link
+    ).scalars().all()
 
     csv_data = "Student ID,Name,Department,Level,Attended,Confidence,Verification Time\n"
     for p in participants:
         # Get latest attendance log for this participant in this exam
-        latest_log = AttendanceLog.query.filter_by(exam_id=exam_id, student_id=p.student_id).order_by(AttendanceLog.timestamp.desc()).first()
+        latest_log = db.session.execute(
+            db.select(AttendanceLog).filter_by(exam_id=exam_id, student_id=p.student.student_id).order_by(AttendanceLog.timestamp.desc())
+        ).scalar_one_or_none()
 
         attended_status = "✓" if p.verified == 1 else "✗"
         confidence = f"{latest_log.confidence:.2f}" if latest_log else "N/A"
@@ -683,13 +689,15 @@ def attendance_report(exam_id):
 @login_required
 def attendance_stats(exam_id):
     """API endpoint to get attendance statistics for a given exam."""
-    total_participants = ExamParticipant.query.filter_by(exam_id=exam_id).count()
-    attended_count = ExamParticipant.query.filter_by(exam_id=exam_id, verified=1).count()
+    total_participants = db.session.execute(db.select(ExamParticipant).filter_by(exam_id=exam_id)).scalar_one_or_none()
+    # If using count directly on query object:
+    total_participants_count = db.session.query(ExamParticipant).filter_by(exam_id=exam_id).count()
+    attended_count = db.session.query(ExamParticipant).filter_by(exam_id=exam_id, verified=1).count()
     
-    percentage = (attended_count / total_participants * 100) if total_participants > 0 else 0
+    percentage = (attended_count / total_participants_count * 100) if total_participants_count > 0 else 0
 
     return jsonify({
-        'total': total_participants,
+        'total': total_participants_count, # Corrected to use count() directly
         'attended': attended_count,
         'percentage': round(percentage, 2)
     })
@@ -701,9 +709,11 @@ def get_exam_participants(exam_id):
     """API endpoint to get detailed list of participants for an exam, including their verified status."""
     try:
         # Eagerly load the related Student object to get name, student_id
-        participants = ExamParticipant.query.filter_by(exam_id=exam_id).options(
-            db.joinedload(ExamParticipant.student)
-        ).all()
+        participants = db.session.execute(
+            db.select(ExamParticipant).filter_by(exam_id=exam_id).options(
+                db.joinedload(ExamParticipant.student)
+            ).order_by(ExamParticipant.student_id) # Order for consistent display
+        ).scalars().all()
 
         participants_list = []
         for p in participants:
@@ -715,7 +725,7 @@ def get_exam_participants(exam_id):
                 'student_id': p.student.student_id,
                 'name': p.student.name,
                 'verified_status': 'verified' if p.verified == 1 else 'pending',
-                'photo_url': photo_url
+                'photo_url': photo_url # This might not be used in the table, but good to include
             })
         
         return jsonify({'participants': participants_list})
@@ -733,11 +743,13 @@ def verify_student_alias():
     return redirect(url_for('list_exams'))
 
 if __name__ == '__main__':
+    # Ensure directories exist
     os.makedirs('embeddings', exist_ok=True)
     os.makedirs('uploads', exist_ok=True)
     os.makedirs('static/images', exist_ok=True)
     os.makedirs('static/images/students', exist_ok=True)
     
+    # Generate default passport image if missing
     default_passport_path = os.path.join(app.static_folder, 'images', 'default-passport.jpg')
     if not os.path.exists(default_passport_path) and Image:
         print(f"Default passport image not found. Attempting to generate a placeholder at: {default_passport_path}")
